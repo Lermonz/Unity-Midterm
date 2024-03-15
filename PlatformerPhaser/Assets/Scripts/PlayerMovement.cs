@@ -118,13 +118,11 @@ public class PlayerMovement : MonoBehaviour
                 transform.localScale = new Vector3(transform.localScale.x, transform.localScale.y*0.5f, 1);
                 transform.position += Vector3.down*0.15f;
                 _hSpeed = 1f;
-                _traction = 0.88f;
                 _maxRunSpeed *= 0.5f;
             }
             if(Input.GetKeyUp(KeyCode.S)) {
                 transform.localScale = new Vector3(transform.localScale.x, transform.localScale.y*2, 1);
                 _hSpeed = 8f;
-                _traction = 0.92f;
                 _maxRunSpeed *= 2;
             }
             // move horizontally
