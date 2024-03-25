@@ -1,28 +1,28 @@
 using System.Collections;
-using Unity.VisualScripting;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 public class PlayerMovement : MonoBehaviour
 {
     [SerializeField] float _hSpeed = 8f;
-    float _hSpeedAir = 4.2f;
+    [SerializeField] float _hSpeedAir = 3.8f;
+    [SerializeField] float _hSpeedWJ = 0.8f;
     [SerializeField] float _jumpVelocity;
-    float _initJumpVelocity = 12f;
+    float _initJumpVelocity = 14f;
     [SerializeField] float _wallJumpVelocity;
-    float _initWallJumpVelocity = 9.5f;
+    float _initWallJumpVelocity = 11f;
     float wallJumpDirection;
-    float _traction = 0.92f;
+    [SerializeField] float _traction = 0.92f;
     [SerializeField] bool _isGrounded;
     [SerializeField] bool _isJumping;
     [SerializeField] bool _isWallJumping = false;
     [SerializeField] bool _canWallJump;
     bool _touchingDeath = false;
     bool _isSmall = false;
+    bool _isCrouch = false;
     Coroutine _smallCoroutine;
     float _finalWallJumpSpeed;
     [SerializeField] float _runInput;
-    float _maxRunSpeed = 7.5f;
+    [SerializeField] float _maxRunSpeed = 7.5f;
     Rigidbody2D _body;
     BoxCollider2D _collider;
     SpriteRenderer _renderer;
@@ -54,7 +54,7 @@ public class PlayerMovement : MonoBehaviour
             Vector2 rayFloorOriginR = new Vector2(_collider.bounds.center.x+transform.localScale.x*0.49f,_collider.bounds.min.y); // set origin point for ray to check ground
             LayerMask maskSolids;
             if(_isPhaseMode) {
-                maskSolids = LayerMask.GetMask("Solids"); // only register floors and walls
+                maskSolids = LayerMask.GetMask("Solids","ReversePhasable"); // only register floors and walls
             }
             else {
                 maskSolids = LayerMask.GetMask("Solids","Phasable"); // only register floors and walls
@@ -71,6 +71,7 @@ public class PlayerMovement : MonoBehaviour
         
             _runInput = Input.GetAxisRaw("Horizontal");
             _runInput = _isDead ? 0 : _runInput;
+            _runInput = _isCrouch && _isGrounded ? 0 : _runInput;
             if(Mathf.Abs(transform.position.x) > Mathf.Abs(Utilities.SetXLimit(_camera,_renderer))) {
                 float stayAway = (Utilities.SetXLimit(_camera,_renderer)-0.01f)*Mathf.Sign(transform.position.x);
                 transform.position = new Vector3(stayAway, transform.position.y, transform.position.z);
@@ -83,7 +84,7 @@ public class PlayerMovement : MonoBehaviour
                     _animator.SetTrigger("JumpAnimUp");
                 }
             }
-            else {
+            else if(_isGrounded) {
                 if(_runInput != 0) {
                     _animator.SetTrigger("WalkingAnim");
                 }
@@ -102,13 +103,23 @@ public class PlayerMovement : MonoBehaviour
             }
             if(Input.GetKey(KeyCode.P)) {
                 Physics2D.IgnoreLayerCollision(0,3);
+                Physics2D.IgnoreLayerCollision(0,8,false);
                 _renderer.color = new Color(0.5f,0.5f,1f,0.85f);
                 _isPhaseMode = true;
             }
             else {
                 Physics2D.IgnoreLayerCollision(0,3,false);
+                Physics2D.IgnoreLayerCollision(0,8);
                 _renderer.color = new Color(1f,1f,1f,1f);
                 _isPhaseMode = false;
+            }
+            LayerMask maskPhasables = LayerMask.GetMask("Phasable");
+            Collider2D checkWallOverlap = Physics2D.OverlapBox(_collider.bounds.center, new Vector2(0.01f,0.01f), 180, maskPhasables);
+            LayerMask maskReversePhasables = LayerMask.GetMask("ReversePhasable");
+            Collider2D checkReverseWallOverlap = Physics2D.OverlapBox(_collider.bounds.center, new Vector2(0.01f,0.01f), 180, maskReversePhasables);
+            bool overlapWall = false;
+            if((checkWallOverlap != null && !_isPhaseMode) || (checkReverseWallOverlap != null && _isPhaseMode)) {
+                overlapWall = true;
             }
             if(_isSmall) {
                 _smallCoroutine = StartCoroutine(BeSmall());
@@ -117,18 +128,25 @@ public class PlayerMovement : MonoBehaviour
             if(Input.GetKeyDown(KeyCode.S)) {
                 transform.localScale = new Vector3(transform.localScale.x, transform.localScale.y*0.5f, 1);
                 transform.position += Vector3.down*0.15f;
-                _hSpeed = 1f;
+                _isCrouch = true;
+                _hSpeed = 0f;
+                _traction = 0.97f;
                 _maxRunSpeed *= 0.5f;
             }
             if(Input.GetKeyUp(KeyCode.S)) {
                 transform.localScale = new Vector3(transform.localScale.x, transform.localScale.y*2, 1);
+                _isCrouch = false;
                 _hSpeed = 8f;
+                _traction = 0.92f;
                 _maxRunSpeed *= 2;
             }
             // move horizontally
-            if(_runInput*_body.velocity.x < _maxRunSpeed && !_isWallJumping) {
+            if(_runInput*_body.velocity.x < _maxRunSpeed) {
                 if(_isGrounded) {
                     _body.AddForce(Vector2.right*_runInput*_hSpeed);
+                }
+                else if(_isWallJumping) {
+                    _body.AddForce(Vector2.right*_runInput*_hSpeedWJ);
                 }
                 else {
                     _body.AddForce(Vector2.right*_runInput*_hSpeedAir);
@@ -184,18 +202,18 @@ public class PlayerMovement : MonoBehaviour
                 GetComponent<AudioSource>().Play();
             }
             if(Mathf.Abs(_body.velocity.x) < _finalWallJumpSpeed && !_isGrounded) {
-                float alpha = (((_finalWallJumpSpeed/Mathf.Abs(_body.velocity.x))-1)*0.75f)+1; // multiplier to decrease movement speed in the opposite direction from where you wall jumped
+                float alpha = (((_finalWallJumpSpeed/Mathf.Abs(_body.velocity.x))-1)*0.95f)+1; // multiplier to decrease movement speed in the opposite direction from where you wall jumped
                 _body.velocity = new Vector2(_body.velocity.x*alpha, _body.velocity.y);
                 _finalWallJumpSpeed = Mathf.Abs(_body.velocity.x);
             }
-            else if(Mathf.Abs(_body.velocity.x) > _finalWallJumpSpeed || _isGrounded) {
+            else if(Mathf.Abs(_body.velocity.x) > _finalWallJumpSpeed || _body.velocity.y < 0) {
                 _finalWallJumpSpeed = 0;
             }
-            if(transform.position.y < (_vertCameraBounds-_camera.orthographicSize*2) || _touchingDeath) {
+            if(transform.position.y < (_vertCameraBounds-_camera.orthographicSize*2+1) || _touchingDeath || overlapWall) {
                 _isDead = true;
                 _animator.SetTrigger("DeathAnim");
-                Debug.Log("Death anim");
                 StartCoroutine(Respawn());
+                GameBehaviour.Instance.YouDied();
                 if(_smallCoroutine != null && _isSmall){
                     StopCoroutine(_smallCoroutine);
                     _isSmall = false;
@@ -206,11 +224,10 @@ public class PlayerMovement : MonoBehaviour
             }
             if(transform.position.y > (_vertCameraBounds+0.5f) && !_ignoreVCB) {
                 _isLevelTransition = true;
-                
                 StartCoroutine(IgnoreVertBounds());
                 _origin = new Vector3(transform.position.x, -7.5f+20*GameBehaviour._onLevel, transform.position.z);
-                transform.position = _origin-Vector3.up*1.5f;
-                _body.velocity = Vector2.up*9.5f;
+                transform.position = _origin-Vector3.up*2.5f;
+                _body.velocity = Vector2.up*_initJumpVelocity;
                 //move camera up to next screen somehow????
                 //reset _vertCameraBounds
                 //reset player origin point
@@ -234,7 +251,7 @@ public class PlayerMovement : MonoBehaviour
         yield return new WaitForSeconds(0.3f);
         _isDead = false;
         transform.position = _origin;
-        _body.gravityScale = 2;
+        _body.gravityScale = 3;
     }
     IEnumerator IgnoreVertBounds() {
         _ignoreVCB = true;

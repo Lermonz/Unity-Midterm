@@ -1,4 +1,3 @@
-using UnityEditor;
 using UnityEngine;
 
 public class LinearTrack : MonoBehaviour
@@ -9,8 +8,8 @@ public class LinearTrack : MonoBehaviour
     [SerializeField] [Range(-20,20)] float _distance;
     [SerializeField] [Range(1,10)] float _speed;
     float _realSpeed;
-    int elapsedFrames;
-    int elapsedFramesReverse;
+    float elapsedFrames;
+    float elapsedFramesReverse;
     bool directionNormal = true;
     void Start()
     {
@@ -22,7 +21,7 @@ public class LinearTrack : MonoBehaviour
     {
         if(directionNormal){
             if(elapsedFrames < _realSpeed) {
-                elapsedFrames++;
+                elapsedFrames+=Time.deltaTime*100;
                 float interpRatio = elapsedFrames/_realSpeed;
                 transform.position = Vector3.Lerp(_startPos,_endPos,interpRatio);
             }
@@ -33,7 +32,7 @@ public class LinearTrack : MonoBehaviour
         }
         else{
             if(elapsedFramesReverse > 0) {
-                elapsedFramesReverse--;
+                elapsedFramesReverse-=Time.deltaTime*100;
                 float interpRatio = elapsedFramesReverse/_realSpeed;
                 transform.position = Vector3.Lerp(_startPos,_endPos,interpRatio);
             }
@@ -42,5 +41,11 @@ public class LinearTrack : MonoBehaviour
                 elapsedFrames = 0;
             }
         }
+    }
+    void OnCollisionEnter2D(Collision2D other) {
+        other.transform.SetParent(transform);
+    }
+    void OnCollisionExit2D(Collision2D other) {
+        other.transform.SetParent(null);
     }
 }
