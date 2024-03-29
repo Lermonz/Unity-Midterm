@@ -21,7 +21,7 @@ public class Powerup : MonoBehaviour
         allPowerUps.transform.position = Vector3.zero;
     }
     void Update() {
-        if((PlayerMovement._isDead || PlayerMovement._isLevelTransition) && itemGot) {
+        if(PlayerMovement._isDead || PlayerMovement._isLevelTransition) {
             ResetPosition();
         }
     }

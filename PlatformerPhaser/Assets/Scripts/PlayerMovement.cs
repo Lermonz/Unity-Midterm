@@ -11,15 +11,17 @@ public class PlayerMovement : MonoBehaviour
     [SerializeField] float _wallJumpVelocity;
     float _initWallJumpVelocity = 11f;
     float wallJumpDirection;
-    [SerializeField] float _traction = 0.92f;
+    [SerializeField] float _traction;
     [SerializeField] bool _isGrounded;
     [SerializeField] bool _isJumping;
     [SerializeField] bool _isWallJumping = false;
     [SerializeField] bool _canWallJump;
-    bool _touchingDeath = false;
-    bool _isSmall = false;
     bool _isCrouch = false;
-    Coroutine _smallCoroutine;
+    bool _touchingDeath = false;
+    bool _isPower = false;
+    bool _isPowerDisplay = false;
+    float _powerTime = 5f;
+    Coroutine _powerCoroutine;
     float _finalWallJumpSpeed;
     [SerializeField] float _runInput;
     [SerializeField] float _maxRunSpeed = 7.5f;
@@ -33,6 +35,7 @@ public class PlayerMovement : MonoBehaviour
     float _vertCameraBounds;
     bool _ignoreVCB = false;
     public static bool _isDead;
+    bool _isDeadDisplay;
     public static bool _isLevelTransition;
     Vector3 _origin;
     void Awake()
@@ -54,10 +57,10 @@ public class PlayerMovement : MonoBehaviour
             Vector2 rayFloorOriginR = new Vector2(_collider.bounds.center.x+transform.localScale.x*0.49f,_collider.bounds.min.y); // set origin point for ray to check ground
             LayerMask maskSolids;
             if(_isPhaseMode) {
-                maskSolids = LayerMask.GetMask("Solids","ReversePhasable"); // only register floors and walls
+                maskSolids = LayerMask.GetMask("Solids","ReversePhasable","SpikeCollision"); // only register floors and walls
             }
             else {
-                maskSolids = LayerMask.GetMask("Solids","Phasable"); // only register floors and walls
+                maskSolids = LayerMask.GetMask("Solids","Phasable","SpikeCollision"); // only register floors and walls
             }
             RaycastHit2D nearestGroundL = Physics2D.Raycast(rayFloorOriginL, Vector2.down, Mathf.Infinity, maskSolids);
             RaycastHit2D nearestGroundR = Physics2D.Raycast(rayFloorOriginR, Vector2.down, Mathf.Infinity, maskSolids);
@@ -76,6 +79,7 @@ public class PlayerMovement : MonoBehaviour
                 float stayAway = (Utilities.SetXLimit(_camera,_renderer)-0.01f)*Mathf.Sign(transform.position.x);
                 transform.position = new Vector3(stayAway, transform.position.y, transform.position.z);
             }
+            //animation
             if(!_isGrounded) {
                 if(_body.velocity.y <= 0) {
                     _animator.SetTrigger("JumpAnimDown");
@@ -92,6 +96,7 @@ public class PlayerMovement : MonoBehaviour
                     _animator.SetTrigger("IdleGrounded");
                 }
             }
+            //prevent negative speed
             if(_hSpeed < 0) {
                 _hSpeed = 0;
             }
@@ -101,18 +106,34 @@ public class PlayerMovement : MonoBehaviour
             if(_wallJumpVelocity < 0) {
                 _wallJumpVelocity = 0;
             }
+            //phase collision ignores
             if(Input.GetKey(KeyCode.P)) {
                 Physics2D.IgnoreLayerCollision(0,3);
                 Physics2D.IgnoreLayerCollision(0,8,false);
-                _renderer.color = new Color(0.5f,0.5f,1f,0.85f);
                 _isPhaseMode = true;
             }
             else {
                 Physics2D.IgnoreLayerCollision(0,3,false);
                 Physics2D.IgnoreLayerCollision(0,8);
-                _renderer.color = new Color(1f,1f,1f,1f);
                 _isPhaseMode = false;
             }
+            if(_isPower) {
+                Physics2D.IgnoreLayerCollision(0,9,false);
+            }
+            else {
+                Physics2D.IgnoreLayerCollision(0,9);
+            }
+            //Color
+            if(_isPowerDisplay){
+                _renderer.color = Color.Lerp(Color.red, Color.green, Mathf.PingPong(Time.time*5, 1f));
+            }
+            else if(_isPhaseMode) {
+                _renderer.color = new Color(0.5f,0.5f,1f,0.85f);
+            }
+            else {
+                _renderer.color = new Color(1f,1f,1f,1f);
+            }
+            //checks if overlapping a wall when in the wrong phase type
             LayerMask maskPhasables = LayerMask.GetMask("Phasable");
             Collider2D checkWallOverlap = Physics2D.OverlapBox(_collider.bounds.center, new Vector2(0.01f,0.01f), 180, maskPhasables);
             LayerMask maskReversePhasables = LayerMask.GetMask("ReversePhasable");
@@ -121,23 +142,20 @@ public class PlayerMovement : MonoBehaviour
             if((checkWallOverlap != null && !_isPhaseMode) || (checkReverseWallOverlap != null && _isPhaseMode)) {
                 overlapWall = true;
             }
-            if(_isSmall) {
-                _smallCoroutine = StartCoroutine(BeSmall());
-            }
             //crouch
             if(Input.GetKeyDown(KeyCode.S)) {
                 transform.localScale = new Vector3(transform.localScale.x, transform.localScale.y*0.5f, 1);
                 transform.position += Vector3.down*0.15f;
                 _isCrouch = true;
                 _hSpeed = 0f;
-                _traction = 0.97f;
+                _traction += 0.05f;
                 _maxRunSpeed *= 0.5f;
             }
             if(Input.GetKeyUp(KeyCode.S)) {
                 transform.localScale = new Vector3(transform.localScale.x, transform.localScale.y*2, 1);
                 _isCrouch = false;
                 _hSpeed = 8f;
-                _traction = 0.92f;
+                _traction -= 0.05f;
                 _maxRunSpeed *= 2;
             }
             // move horizontally
@@ -209,18 +227,21 @@ public class PlayerMovement : MonoBehaviour
             else if(Mathf.Abs(_body.velocity.x) > _finalWallJumpSpeed || _body.velocity.y < 0) {
                 _finalWallJumpSpeed = 0;
             }
-            if(transform.position.y < (_vertCameraBounds-_camera.orthographicSize*2+1) || _touchingDeath || overlapWall) {
+            if(transform.position.y < (_vertCameraBounds-_camera.orthographicSize*2+1) || ((_touchingDeath && !_isPower)|| overlapWall)) {
                 _isDead = true;
-                _animator.SetTrigger("DeathAnim");
+                _isDeadDisplay = true;
+            }
+            if(_isDead){
                 StartCoroutine(Respawn());
                 GameBehaviour.Instance.YouDied();
-                if(_smallCoroutine != null && _isSmall){
-                    StopCoroutine(_smallCoroutine);
-                    _isSmall = false;
-                    RevertSizeToNormal();
+                if(_powerCoroutine != null && _isPower){
+                    StopCoroutine(_powerCoroutine);
                 }
                 //kill player
                 //reset position to origin point of screen
+            }
+            if(_isDeadDisplay){
+                _animator.SetTrigger("DeathAnim");
             }
             if(transform.position.y > (_vertCameraBounds+0.5f) && !_ignoreVCB) {
                 _isLevelTransition = true;
@@ -249,9 +270,11 @@ public class PlayerMovement : MonoBehaviour
         _body.velocity = Vector2.zero;
         _touchingDeath = false;
         yield return new WaitForSeconds(0.3f);
-        _isDead = false;
+        _isDeadDisplay = false;
         transform.position = _origin;
         _body.gravityScale = 3;
+        yield return new WaitForSeconds(0.15f);
+        _isDead = false;
     }
     IEnumerator IgnoreVertBounds() {
         _ignoreVCB = true;
@@ -262,24 +285,33 @@ public class PlayerMovement : MonoBehaviour
         _vertCameraBounds = Utilities.SetYLimit(_camera, GetComponent<SpriteRenderer>());
         _ignoreVCB = false;
     }
-    IEnumerator BeSmall() {
-        _isSmall = false;
-        transform.localScale = transform.localScale*0.5f;
-        yield return new WaitForSeconds(5f);
-        RevertSizeToNormal();
+    IEnumerator Invincible() {
+        yield return new WaitForSeconds(_powerTime);
+        _isPowerDisplay = false;
+        yield return new WaitForSeconds(0.5f);
+        _isPower = false;
     }
     void OnTriggerEnter2D(Collider2D other) {
         if(other.CompareTag("Kill")) {
             _touchingDeath = true;
         }
         if(other.CompareTag("Item")) {
-            _isSmall = true;
-            other.gameObject.transform.position = other.gameObject.transform.position - Vector3.up*20;
+            _isPower = true;
+            _isPowerDisplay = true;
+            StartCoroutine(Invincible());
+        }
+        if(other.CompareTag("Sign")) {
+            GameObject dialogue = GameObject.Find("Sign Dialogue");
+            dialogue.transform.position = Vector3.zero;
         }
     }
-    void RevertSizeToNormal() {
-        if(transform.localScale.x <= 1.0f) {
-            transform.localScale = transform.localScale*2;
+    void OnTriggerExit2D(Collider2D other) {
+        if(other.CompareTag("Kill")) {
+            _touchingDeath = false;
+        }
+        if(other.CompareTag("Sign")) {
+            GameObject dialogue = GameObject.Find("Sign Dialogue");
+            dialogue.transform.position = new Vector3(0,0,1000);
         }
     }
 }
