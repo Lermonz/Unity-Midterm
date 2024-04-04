@@ -1,3 +1,4 @@
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class LinearTrack : MonoBehaviour
@@ -13,7 +14,7 @@ public class LinearTrack : MonoBehaviour
     bool directionNormal = true;
     void Start()
     {
-        _startPos = new Vector3(transform.position.x, transform.position.y,0);
+        _startPos = new Vector3(transform.position.x, transform.position.y,transform.position.z);
         _endPos = !_isVertical ? _startPos + Vector3.right*_distance : _startPos + Vector3.up*_distance;
         _realSpeed = 1000 / _speed;
     }
@@ -42,8 +43,10 @@ public class LinearTrack : MonoBehaviour
             }
         }
     }
-    void OnCollisionEnter2D(Collision2D other) {
-        other.transform.SetParent(transform);
+    void OnCollisionStay2D(Collision2D other) {
+        if(other.transform.position.y > transform.position.y + transform.localScale.y*0.5f){
+            other.transform.SetParent(transform);
+        }
     }
     void OnCollisionExit2D(Collision2D other) {
         other.transform.SetParent(null);

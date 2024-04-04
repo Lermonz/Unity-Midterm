@@ -1,27 +1,32 @@
 using System.Collections;
+using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
 public class PlayerMovement : MonoBehaviour
 {
-    [SerializeField] float _hSpeed = 8f;
-    [SerializeField] float _hSpeedAir = 3.8f;
-    [SerializeField] float _hSpeedWJ = 0.8f;
+    [SerializeField] float _hSpeed = 80f;
+    [SerializeField] float _hSpeedAir = 38f;
+    [SerializeField] float _hSpeedWJ = 8f;
     [SerializeField] float _jumpVelocity;
     float _initJumpVelocity = 14f;
     [SerializeField] float _wallJumpVelocity;
-    float _initWallJumpVelocity = 11f;
+    float _initWallJumpVelocity = 11.5f;
     float wallJumpDirection;
     [SerializeField] float _traction;
     [SerializeField] bool _isGrounded;
+    bool _canJump;
     [SerializeField] bool _isJumping;
     [SerializeField] bool _isWallJumping = false;
     [SerializeField] bool _canWallJump;
+    bool _wallJumpCoroutine;
+    bool _doJumpNow;
+    bool _doWallJumpNow;
     bool _isCrouch = false;
     bool _touchingDeath = false;
     bool _isPower = false;
     bool _isPowerDisplay = false;
     float _powerTime = 5f;
-    Coroutine _powerCoroutine;
+    bool _powerCoroutine = false;
     float _finalWallJumpSpeed;
     [SerializeField] float _runInput;
     [SerializeField] float _maxRunSpeed = 7.5f;
@@ -30,6 +35,7 @@ public class PlayerMovement : MonoBehaviour
     SpriteRenderer _renderer;
     [SerializeField] bool _isPhaseMode;
     [SerializeField] AudioClip jumpClip;
+    [SerializeField] AudioClip[] deathClips;
     Camera _camera;
     Animator _animator;
     float _vertCameraBounds;
@@ -51,27 +57,43 @@ public class PlayerMovement : MonoBehaviour
     }
     void Update()
     {
-        if(GameBehaviour.Instance.State == GameBehaviour.GameState.Play) {
+        if(GameBehaviour.Instance.State == GameBehaviour.GameState.Play || GameBehaviour.Instance.State == GameBehaviour.GameState.Finale) {
             // checking nearest point of Ground
             Vector2 rayFloorOriginL = new Vector2(_collider.bounds.center.x-transform.localScale.x*0.49f,_collider.bounds.min.y); // set origin point for ray to check ground
             Vector2 rayFloorOriginR = new Vector2(_collider.bounds.center.x+transform.localScale.x*0.49f,_collider.bounds.min.y); // set origin point for ray to check ground
             LayerMask maskSolids;
-            if(_isPhaseMode) {
-                maskSolids = LayerMask.GetMask("Solids","ReversePhasable","SpikeCollision"); // only register floors and walls
+            if(_isPower) {
+                if(_isPhaseMode) {
+                    maskSolids = LayerMask.GetMask("Solids","ReversePhasable","SpikeCollision"); // only register floors and walls
+                }
+                else {
+                    maskSolids = LayerMask.GetMask("Solids","Phasable","SpikeCollision"); // only register floors and walls
+                }
             }
             else {
-                maskSolids = LayerMask.GetMask("Solids","Phasable","SpikeCollision"); // only register floors and walls
+                if(_isPhaseMode) {
+                    maskSolids = LayerMask.GetMask("Solids","ReversePhasable"); // only register floors and walls
+                }
+                else {
+                    maskSolids = LayerMask.GetMask("Solids","Phasable"); // only register floors and walls
+                }
             }
             RaycastHit2D nearestGroundL = Physics2D.Raycast(rayFloorOriginL, Vector2.down, Mathf.Infinity, maskSolids);
             RaycastHit2D nearestGroundR = Physics2D.Raycast(rayFloorOriginR, Vector2.down, Mathf.Infinity, maskSolids);
-            _isGrounded = nearestGroundL.distance < 0.1f || nearestGroundR.distance < 0.1f; // if ray to floor is small enough, then you are touching ground
+            // if ray to floor is small enough, then you are touching ground
+            
             // checking nearest point of Wall
             float rayWallXPosition = !_renderer.flipX ? _collider.bounds.max.x : _collider.bounds.min.x;
             Vector2 rayWallOriginT = new Vector2(rayWallXPosition,_collider.bounds.max.y);
             Vector2 rayWallOriginB = new Vector2(rayWallXPosition,_collider.bounds.min.y);
             RaycastHit2D nearestWallTop = Physics2D.Raycast(rayWallOriginT, !_renderer.flipX ? Vector2.right : Vector2.left, Mathf.Infinity, maskSolids);
             RaycastHit2D nearestWallBottom = Physics2D.Raycast(rayWallOriginB, !_renderer.flipX ? Vector2.right : Vector2.left, Mathf.Infinity, maskSolids);
-        
+            if(nearestGroundL.distance < 0.1f || nearestGroundR.distance < 0.1f) {
+                _isGrounded =  true;
+            }
+            else {
+                _isGrounded = false;
+            }
             _runInput = Input.GetAxisRaw("Horizontal");
             _runInput = _isDead ? 0 : _runInput;
             _runInput = _isCrouch && _isGrounded ? 0 : _runInput;
@@ -79,23 +101,7 @@ public class PlayerMovement : MonoBehaviour
                 float stayAway = (Utilities.SetXLimit(_camera,_renderer)-0.01f)*Mathf.Sign(transform.position.x);
                 transform.position = new Vector3(stayAway, transform.position.y, transform.position.z);
             }
-            //animation
-            if(!_isGrounded) {
-                if(_body.velocity.y <= 0) {
-                    _animator.SetTrigger("JumpAnimDown");
-                }
-                else {
-                    _animator.SetTrigger("JumpAnimUp");
-                }
-            }
-            else if(_isGrounded) {
-                if(_runInput != 0) {
-                    _animator.SetTrigger("WalkingAnim");
-                }
-                else {
-                    _animator.SetTrigger("IdleGrounded");
-                }
-            }
+            
             //prevent negative speed
             if(_hSpeed < 0) {
                 _hSpeed = 0;
@@ -105,6 +111,9 @@ public class PlayerMovement : MonoBehaviour
             }
             if(_wallJumpVelocity < 0) {
                 _wallJumpVelocity = 0;
+            }
+            if(Mathf.Abs(_body.velocity.x) < 0) {
+                _body.velocity = new Vector2(0,_body.velocity.y);
             }
             //phase collision ignores
             if(Input.GetKey(KeyCode.P)) {
@@ -125,7 +134,13 @@ public class PlayerMovement : MonoBehaviour
             }
             //Color
             if(_isPowerDisplay){
-                _renderer.color = Color.Lerp(Color.red, Color.green, Mathf.PingPong(Time.time*5, 1f));
+                
+                if(_isPhaseMode) {
+                    _renderer.color = Color.Lerp(new Color(1f,0f,0.5f,0.85f), new Color(0f,1f,0.5f,0.85f), Mathf.PingPong(Time.time*5, 1f));
+                }
+                else {
+                    _renderer.color = Color.Lerp(Color.red, Color.green, Mathf.PingPong(Time.time*5, 1f));
+                }
             }
             else if(_isPhaseMode) {
                 _renderer.color = new Color(0.5f,0.5f,1f,0.85f);
@@ -142,42 +157,28 @@ public class PlayerMovement : MonoBehaviour
             if((checkWallOverlap != null && !_isPhaseMode) || (checkReverseWallOverlap != null && _isPhaseMode)) {
                 overlapWall = true;
             }
+            
             //crouch
             if(Input.GetKeyDown(KeyCode.S)) {
                 transform.localScale = new Vector3(transform.localScale.x, transform.localScale.y*0.5f, 1);
                 transform.position += Vector3.down*0.15f;
                 _isCrouch = true;
                 _hSpeed = 0f;
-                _traction += 0.05f;
                 _maxRunSpeed *= 0.5f;
             }
-            if(Input.GetKeyUp(KeyCode.S)) {
-                transform.localScale = new Vector3(transform.localScale.x, transform.localScale.y*2, 1);
+            if(Input.GetKeyUp(KeyCode.S) && _isCrouch) {
                 _isCrouch = false;
-                _hSpeed = 8f;
-                _traction -= 0.05f;
+                transform.localScale = new Vector3(transform.localScale.x, transform.localScale.y*2, 1);
+                _hSpeed = 30f;
                 _maxRunSpeed *= 2;
-            }
-            // move horizontally
-            if(_runInput*_body.velocity.x < _maxRunSpeed) {
-                if(_isGrounded) {
-                    _body.AddForce(Vector2.right*_runInput*_hSpeed);
-                }
-                else if(_isWallJumping) {
-                    _body.AddForce(Vector2.right*_runInput*_hSpeedWJ);
-                }
-                else {
-                    _body.AddForce(Vector2.right*_runInput*_hSpeedAir);
-                }
             }
             // caps run speed at _maxRunSpeed
             if(Mathf.Abs(_runInput*_body.velocity.x) >= _maxRunSpeed && !_isWallJumping) {
                 _body.velocity = new Vector2(Mathf.Sign(_body.velocity.x) * _maxRunSpeed,_body.velocity.y);
             }
-            if(_runInput == 0 && !_isWallJumping) {
+            if((_runInput == 0 || (_runInput < 0 && _body.velocity.x > 0) || (_runInput > 0 && _body.velocity.x < 0)) && !_isWallJumping) {
                 _body.velocity = new Vector2(_body.velocity.x * _traction,_body.velocity.y);
             }
-            //transform.Translate(Vector3.right*Time.deltaTime*_runInput*_hSpeed);
             // flips player sprite
             if (((_runInput > 0 && _renderer.flipX) || (_runInput < 0 && !_renderer.flipX)) && !_isWallJumping) {
                 _renderer.flipX = !_renderer.flipX;
@@ -185,14 +186,27 @@ public class PlayerMovement : MonoBehaviour
             
             // if you are grounded, you are not jumping
             if(_isGrounded) {
-                //_isJumping = false;
+                _canJump = true;
+                _isJumping = false;
                 _isWallJumping = false;
             }
+            if((nearestWallTop.distance < 0.2f || nearestWallBottom.distance < 0.2f) && !_isGrounded) {
+                _canWallJump = true;
+            }
+            else {
+                _canWallJump = false;
+            }
+            if(_canWallJump || _isJumping) {
+                _canJump = false;
+            }
+            if(_canJump && !_isGrounded) {
+                StartCoroutine(CoyoteTime());
+            }
             // Grounded Jump
-            if(Input.GetKeyDown(KeyCode.O) && _isGrounded) {
+            if(Input.GetKeyDown(KeyCode.O) && _canJump) {
                 _jumpVelocity = _initJumpVelocity;
-                _isJumping = true;
-                _body.AddForce(transform.up*_jumpVelocity, ForceMode2D.Impulse);
+                _canJump = false;
+                _doJumpNow = true;
                 GetComponent<AudioSource>().clip = jumpClip;
                 GetComponent<AudioSource>().Play();
             }
@@ -200,12 +214,7 @@ public class PlayerMovement : MonoBehaviour
                 _body.velocity = new Vector2(_body.velocity.x, _body.velocity.y*0.6f);
                 _isJumping = false;
             }
-            if((nearestWallTop.distance < 0.1f || nearestWallBottom.distance < 0.1f)&& !_isGrounded) {
-                _canWallJump = true;
-            }
-            else {
-                _canWallJump = false;
-            }
+            
             // Wall Jump
             
             if(Input.GetKeyDown(KeyCode.O) && _canWallJump) {
@@ -214,19 +223,34 @@ public class PlayerMovement : MonoBehaviour
                 wallJumpDirection = _renderer.flipX ? 1 : -1;   
                 _renderer.flipX = !_renderer.flipX; //flip sprite on walljump
                 _isWallJumping = true;
-                _body.AddForce(new Vector2(_wallJumpVelocity*wallJumpDirection, _wallJumpVelocity), ForceMode2D.Impulse);
+                _doWallJumpNow = true;
                 StartCoroutine(WallJumpHorizontalDecrease());
                 GetComponent<AudioSource>().clip = jumpClip;
                 GetComponent<AudioSource>().Play();
             }
+            //Debug.Log("body velocity: "+_body.velocity);
+            if(_finalWallJumpSpeed != 0) {
+                Debug.Log(_finalWallJumpSpeed);
+            }
             if(Mathf.Abs(_body.velocity.x) < _finalWallJumpSpeed && !_isGrounded) {
-                float alpha = (((_finalWallJumpSpeed/Mathf.Abs(_body.velocity.x))-1)*0.95f)+1; // multiplier to decrease movement speed in the opposite direction from where you wall jumped
+                Debug.Log("PRE alpha: "+_body.velocity);
+                float alpha = _body.velocity.x != 0 ? (((_finalWallJumpSpeed/Mathf.Abs(_body.velocity.x))-1)*0.95f)+1 : 0; // multiplier to decrease movement speed in the opposite direction from where you wall jumped
                 _body.velocity = new Vector2(_body.velocity.x*alpha, _body.velocity.y);
                 _finalWallJumpSpeed = Mathf.Abs(_body.velocity.x);
+                Debug.Log("Alpha: "+alpha+"\nFinal Wall Jump Speed: "+_finalWallJumpSpeed);
+                Debug.Log("POST alpha: "+_body.velocity);
             }
             else if(Mathf.Abs(_body.velocity.x) > _finalWallJumpSpeed || _body.velocity.y < 0) {
                 _finalWallJumpSpeed = 0;
             }
+            if(!_isWallJumping) {
+                _finalWallJumpSpeed = 0;
+                if(_wallJumpCoroutine) {
+                    _wallJumpCoroutine = false;
+                    StopCoroutine(WallJumpHorizontalDecrease());
+                }
+            }
+            //dies
             if(transform.position.y < (_vertCameraBounds-_camera.orthographicSize*2+1) || ((_touchingDeath && !_isPower)|| overlapWall)) {
                 _isDead = true;
                 _isDeadDisplay = true;
@@ -234,15 +258,16 @@ public class PlayerMovement : MonoBehaviour
             if(_isDead){
                 StartCoroutine(Respawn());
                 GameBehaviour.Instance.YouDied();
-                if(_powerCoroutine != null && _isPower){
-                    StopCoroutine(_powerCoroutine);
+                if(_powerCoroutine && _isPower){
+                    StopCoroutine(Invincible());
+                    _isPower = false;
+                    _isPowerDisplay = false;
+                    _powerCoroutine = false;
                 }
                 //kill player
                 //reset position to origin point of screen
             }
-            if(_isDeadDisplay){
-                _animator.SetTrigger("DeathAnim");
-            }
+            
             if(transform.position.y > (_vertCameraBounds+0.5f) && !_ignoreVCB) {
                 _isLevelTransition = true;
                 StartCoroutine(IgnoreVertBounds());
@@ -253,27 +278,59 @@ public class PlayerMovement : MonoBehaviour
                 //reset _vertCameraBounds
                 //reset player origin point
             }
+            //animation
+            
+            if(!_isGrounded) {
+                if(_body.velocity.y <= 0) {
+                    _animator.SetTrigger("JumpAnimDown");
+                }
+                else {
+                    _animator.SetTrigger("JumpAnimUp");
+                }
+            }
+            else if(_isGrounded) {
+                if(_runInput != 0) {
+                    _animator.SetTrigger("WalkingAnim");
+                }
+                else {
+                    _animator.SetTrigger("IdleGrounded");
+                }
+            }
         }
+        if(_isDeadDisplay){
+                _animator.SetTrigger("DeathAnim");
+            }
     }
     IEnumerator WallJumpHorizontalDecrease() {
+        _wallJumpCoroutine = true;
         for(int i = 4; i > 0; i--) {
             _body.velocity = new Vector2(_body.velocity.x*0.85f, _body.velocity.y);
         }
-        yield return new WaitForSeconds(0.55f);
-        _finalWallJumpSpeed = Mathf.Abs(_body.velocity.x);
+        yield return new WaitForSeconds(0.5f);
+        _finalWallJumpSpeed = 0;
         _isWallJumping = false;
+        _wallJumpCoroutine = false;
     }
     //DEATH
     IEnumerator Respawn() {
+        int i = Random.Range(0, deathClips.Length);
+		GetComponent<AudioSource>().clip = deathClips[i];
+		GetComponent<AudioSource>().Play();
         yield return new WaitForSeconds(0.015f);
+        if(_isCrouch) {
+            _isCrouch = false;
+            transform.localScale = new Vector3(transform.localScale.x, transform.localScale.y*2, 1);
+            _hSpeed = 30f;
+            _maxRunSpeed *= 2;
+        }
         _body.gravityScale = 0;
         _body.velocity = Vector2.zero;
         _touchingDeath = false;
-        yield return new WaitForSeconds(0.3f);
+        yield return new WaitForSeconds(0.4f);
         _isDeadDisplay = false;
         transform.position = _origin;
         _body.gravityScale = 3;
-        yield return new WaitForSeconds(0.15f);
+        yield return new WaitForSeconds(0.2f);
         _isDead = false;
     }
     IEnumerator IgnoreVertBounds() {
@@ -286,10 +343,16 @@ public class PlayerMovement : MonoBehaviour
         _ignoreVCB = false;
     }
     IEnumerator Invincible() {
+        _powerCoroutine = true;
         yield return new WaitForSeconds(_powerTime);
         _isPowerDisplay = false;
         yield return new WaitForSeconds(0.5f);
         _isPower = false;
+        _powerCoroutine = false;
+    }
+    IEnumerator CoyoteTime() {
+        yield return new WaitForSeconds(0.1f);
+        _canJump = false;
     }
     void OnTriggerEnter2D(Collider2D other) {
         if(other.CompareTag("Kill")) {
@@ -312,6 +375,36 @@ public class PlayerMovement : MonoBehaviour
         if(other.CompareTag("Sign")) {
             GameObject dialogue = GameObject.Find("Sign Dialogue");
             dialogue.transform.position = new Vector3(0,0,1000);
+        }
+    }
+    void FixedUpdate() {
+        if(!_isDead && GameBehaviour.Instance.State != GameBehaviour.GameState.ScreenMoveUp){
+            // move horizontally
+            if(_runInput*_body.velocity.x < _maxRunSpeed) {
+                if(_isGrounded) {
+                    _body.AddForce(Vector2.right*_runInput*_hSpeed);
+                }
+                else if(_isWallJumping) {
+                    _body.AddForce(Vector2.right*_runInput*_hSpeedWJ);
+                }
+                else {
+                    _body.AddForce(Vector2.right*_runInput*_hSpeedAir);
+                }
+            }
+            //jump physics
+            if(_doJumpNow) {
+                _isJumping = true;
+                _body.AddForce(transform.up*_jumpVelocity, ForceMode2D.Impulse);
+                _doJumpNow = false;
+            }
+            //walljump physics
+            if(_doWallJumpNow) {
+                _body.AddForce(new Vector2(_wallJumpVelocity*wallJumpDirection*0.5f, _wallJumpVelocity), ForceMode2D.Impulse);
+                _doWallJumpNow = false;
+            }
+        }
+        else{
+            _body.velocity = new Vector2(0, _body.velocity.y);
         }
     }
 }

@@ -4,6 +4,7 @@ public class Collectible : MonoBehaviour
 {
     public static bool itemGot = false;
     GameObject allCheeses;
+    [SerializeField] AudioClip collectionClip;
     void Start() {
         allCheeses = GameObject.Find("Collectibles");
     }
@@ -11,6 +12,8 @@ public class Collectible : MonoBehaviour
         if(other.gameObject.CompareTag("Cheese")) {
             GameBehaviour.Instance.CollectItem();
             ItemCollected();
+            GetComponent<AudioSource>().clip = collectionClip;
+            GetComponent<AudioSource>().Play();
         }
     }
     public void ItemCollected() {

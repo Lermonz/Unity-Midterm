@@ -5,7 +5,7 @@ using UnityEngine;
 public class ChangeScreen : MonoBehaviour
 {
     int interpolationFrameCount = 60;
-    int elapsedFrames;
+    float elapsedFrames;
     Vector3 newCameraPos;
     bool hasRun = false;
     void Update()
@@ -16,7 +16,7 @@ public class ChangeScreen : MonoBehaviour
                 hasRun = true;
             }
             if(elapsedFrames < interpolationFrameCount) {
-                elapsedFrames++;
+                elapsedFrames+=(Time.deltaTime*100);
                 float interpolateRatio = (float)elapsedFrames/interpolationFrameCount;
                 Vector3 interpolatedPos = Vector3.Lerp(transform.position, newCameraPos, interpolateRatio);
                 transform.position = interpolatedPos;
@@ -30,7 +30,7 @@ public class ChangeScreen : MonoBehaviour
         }
     }
     IEnumerator MoveUp() {
-        yield return new WaitForSeconds(0.3f);
+        yield return new WaitForSeconds(0.6f);
         PlayerMovement._isLevelTransition = false;
     }
 }
