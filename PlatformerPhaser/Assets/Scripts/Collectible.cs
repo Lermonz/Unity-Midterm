@@ -12,8 +12,7 @@ public class Collectible : MonoBehaviour
         if(other.gameObject.CompareTag("Cheese")) {
             GameBehaviour.Instance.CollectItem();
             ItemCollected();
-            GetComponent<AudioSource>().clip = collectionClip;
-            GetComponent<AudioSource>().Play();
+            GetComponent<AudioSource>().PlayOneShot(collectionClip);
         }
     }
     public void ItemCollected() {

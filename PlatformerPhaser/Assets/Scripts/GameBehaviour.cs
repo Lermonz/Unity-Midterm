@@ -19,7 +19,8 @@ public class GameBehaviour : MonoBehaviour
         Pause,
         Die,
         ScreenMoveUp,
-        Finale
+        Finale,
+        Title
     }
     public GameState State = GameState.Play;
     void Awake()
@@ -45,9 +46,9 @@ public class GameBehaviour : MonoBehaviour
         int ms = Mathf.FloorToInt(Timer.ms*.1f);
         _timeScore = (Timer.m*6000+Timer.s*100+ms);
         _cheeseScore = _totalCheese.Score * 10000;
-        _deathScore = _totalDeath.Deaths * 1000;
+        _deathScore = _totalDeath.Deaths * 2000;
         if(_updateScore) {
-            _score = Mathf.FloorToInt(200000 - _timeScore - _deathScore + _cheeseScore);
+            _score = Mathf.FloorToInt(100000 - _timeScore - _deathScore + _cheeseScore);
             if(_score < 0) {
                 _score = 0;
             }

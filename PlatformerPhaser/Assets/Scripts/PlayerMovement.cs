@@ -36,6 +36,7 @@ public class PlayerMovement : MonoBehaviour
     [SerializeField] bool _isPhaseMode;
     [SerializeField] AudioClip jumpClip;
     [SerializeField] AudioClip[] deathClips;
+    AudioSource _audioSource;
     Camera _camera;
     Animator _animator;
     float _vertCameraBounds;
@@ -50,6 +51,7 @@ public class PlayerMovement : MonoBehaviour
         _collider = GetComponent<BoxCollider2D>();
         _renderer = GetComponent<SpriteRenderer>();
         _animator = GetComponent<Animator>();
+        _audioSource = GetComponent<AudioSource>();
         _camera = GameObject.Find("Main Camera").GetComponent<Camera>();
         _vertCameraBounds = Utilities.SetYLimit(_camera, GetComponent<SpriteRenderer>());
         _isJumping = false;
@@ -189,6 +191,10 @@ public class PlayerMovement : MonoBehaviour
                 _canJump = true;
                 _isJumping = false;
                 _isWallJumping = false;
+                _traction = 0.95f;
+            }
+            else {
+                _traction = 0.98f;
             }
             if((nearestWallTop.distance < 0.2f || nearestWallBottom.distance < 0.2f) && !_isGrounded) {
                 _canWallJump = true;
@@ -207,8 +213,7 @@ public class PlayerMovement : MonoBehaviour
                 _jumpVelocity = _initJumpVelocity;
                 _canJump = false;
                 _doJumpNow = true;
-                GetComponent<AudioSource>().clip = jumpClip;
-                GetComponent<AudioSource>().Play();
+                _audioSource.PlayOneShot(jumpClip);
             }
             if(_isJumping && Input.GetKeyUp(KeyCode.O)) {
                 _body.velocity = new Vector2(_body.velocity.x, _body.velocity.y*0.6f);
@@ -225,8 +230,7 @@ public class PlayerMovement : MonoBehaviour
                 _isWallJumping = true;
                 _doWallJumpNow = true;
                 StartCoroutine(WallJumpHorizontalDecrease());
-                GetComponent<AudioSource>().clip = jumpClip;
-                GetComponent<AudioSource>().Play();
+                _audioSource.PlayOneShot(jumpClip);
             }
             //Debug.Log("body velocity: "+_body.velocity);
             if(_finalWallJumpSpeed != 0) {
@@ -251,7 +255,7 @@ public class PlayerMovement : MonoBehaviour
                 }
             }
             //dies
-            if(transform.position.y < (_vertCameraBounds-_camera.orthographicSize*2+1) || ((_touchingDeath && !_isPower)|| overlapWall)) {
+            if(transform.position.y < (_vertCameraBounds-_camera.orthographicSize*2+1) || ((_touchingDeath && !_isPower)|| overlapWall) || transform.position.y < -9.5f) {
                 _isDead = true;
                 _isDeadDisplay = true;
             }
@@ -268,7 +272,7 @@ public class PlayerMovement : MonoBehaviour
                 //reset position to origin point of screen
             }
             
-            if(transform.position.y > (_vertCameraBounds+0.5f) && !_ignoreVCB) {
+            if(transform.position.y > (_vertCameraBounds+0.5f) && !_ignoreVCB && transform.position.y > 10) {
                 _isLevelTransition = true;
                 StartCoroutine(IgnoreVertBounds());
                 _origin = new Vector3(transform.position.x, -7.5f+20*GameBehaviour._onLevel, transform.position.z);
@@ -314,8 +318,7 @@ public class PlayerMovement : MonoBehaviour
     //DEATH
     IEnumerator Respawn() {
         int i = Random.Range(0, deathClips.Length);
-		GetComponent<AudioSource>().clip = deathClips[i];
-		GetComponent<AudioSource>().Play();
+		_audioSource.PlayOneShot(deathClips[i], 0.9f);
         yield return new WaitForSeconds(0.015f);
         if(_isCrouch) {
             _isCrouch = false;
