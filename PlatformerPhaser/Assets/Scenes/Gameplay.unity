@@ -8491,7 +8491,7 @@ GameObject:
   - component: {fileID: 404198621}
   - component: {fileID: 404198620}
   m_Layer: 0
-  m_Name: Square
+  m_Name: Upsign
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

@@ -1,5 +1,4 @@
 using System.Collections;
-using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
 public class PlayerMovement : MonoBehaviour
@@ -20,6 +19,7 @@ public class PlayerMovement : MonoBehaviour
     [SerializeField] bool _canWallJump;
     bool _wallJumpCoroutine;
     bool _doJumpNow;
+    bool _stopJumpEarly;
     bool _doWallJumpNow;
     bool _isCrouch = false;
     bool _touchingDeath = false;
@@ -174,13 +174,7 @@ public class PlayerMovement : MonoBehaviour
                 _hSpeed = 30f;
                 _maxRunSpeed *= 2;
             }
-            // caps run speed at _maxRunSpeed
-            if(Mathf.Abs(_runInput*_body.velocity.x) >= _maxRunSpeed && !_isWallJumping) {
-                _body.velocity = new Vector2(Mathf.Sign(_body.velocity.x) * _maxRunSpeed,_body.velocity.y);
-            }
-            if((_runInput == 0 || (_runInput < 0 && _body.velocity.x > 0) || (_runInput > 0 && _body.velocity.x < 0)) && !_isWallJumping) {
-                _body.velocity = new Vector2(_body.velocity.x * _traction,_body.velocity.y);
-            }
+            
             // flips player sprite
             if (((_runInput > 0 && _renderer.flipX) || (_runInput < 0 && !_renderer.flipX)) && !_isWallJumping) {
                 _renderer.flipX = !_renderer.flipX;
@@ -191,10 +185,10 @@ public class PlayerMovement : MonoBehaviour
                 _canJump = true;
                 _isJumping = false;
                 _isWallJumping = false;
-                _traction = 0.95f;
+                _traction = 0.81f;
             }
             else {
-                _traction = 0.98f;
+                _traction = 0.9f;
             }
             if((nearestWallTop.distance < 0.2f || nearestWallBottom.distance < 0.2f) && !_isGrounded) {
                 _canWallJump = true;
@@ -213,13 +207,12 @@ public class PlayerMovement : MonoBehaviour
                 _jumpVelocity = _initJumpVelocity;
                 _canJump = false;
                 _doJumpNow = true;
+                _isJumping = true;
                 _audioSource.PlayOneShot(jumpClip);
             }
-            if(_isJumping && Input.GetKeyUp(KeyCode.O)) {
-                _body.velocity = new Vector2(_body.velocity.x, _body.velocity.y*0.6f);
-                _isJumping = false;
+            if(Input.GetKeyUp(KeyCode.O)) {
+                _stopJumpEarly = true;
             }
-            
             // Wall Jump
             
             if(Input.GetKeyDown(KeyCode.O) && _canWallJump) {
@@ -232,17 +225,17 @@ public class PlayerMovement : MonoBehaviour
                 StartCoroutine(WallJumpHorizontalDecrease());
                 _audioSource.PlayOneShot(jumpClip);
             }
-            //Debug.Log("body velocity: "+_body.velocity);
+            /*Debug.Log("body velocity: "+_body.velocity);
             if(_finalWallJumpSpeed != 0) {
                 Debug.Log(_finalWallJumpSpeed);
-            }
+            }*/
             if(Mathf.Abs(_body.velocity.x) < _finalWallJumpSpeed && !_isGrounded) {
-                Debug.Log("PRE alpha: "+_body.velocity);
+                //Debug.Log("PRE alpha: "+_body.velocity);
                 float alpha = _body.velocity.x != 0 ? (((_finalWallJumpSpeed/Mathf.Abs(_body.velocity.x))-1)*0.95f)+1 : 0; // multiplier to decrease movement speed in the opposite direction from where you wall jumped
                 _body.velocity = new Vector2(_body.velocity.x*alpha, _body.velocity.y);
                 _finalWallJumpSpeed = Mathf.Abs(_body.velocity.x);
-                Debug.Log("Alpha: "+alpha+"\nFinal Wall Jump Speed: "+_finalWallJumpSpeed);
-                Debug.Log("POST alpha: "+_body.velocity);
+                //Debug.Log("Alpha: "+alpha+"\nFinal Wall Jump Speed: "+_finalWallJumpSpeed);
+                //Debug.Log("POST alpha: "+_body.velocity);
             }
             else if(Mathf.Abs(_body.velocity.x) > _finalWallJumpSpeed || _body.velocity.y < 0) {
                 _finalWallJumpSpeed = 0;
@@ -382,6 +375,13 @@ public class PlayerMovement : MonoBehaviour
     }
     void FixedUpdate() {
         if(!_isDead && GameBehaviour.Instance.State != GameBehaviour.GameState.ScreenMoveUp){
+            // caps run speed at _maxRunSpeed
+            if(Mathf.Abs(_runInput*_body.velocity.x) >= _maxRunSpeed && !_isWallJumping) {
+                _body.velocity = new Vector2(Mathf.Sign(_body.velocity.x) * _maxRunSpeed,_body.velocity.y);
+            }
+            if((_runInput == 0 || (_runInput < 0 && _body.velocity.x > 0) || (_runInput > 0 && _body.velocity.x < 0)) && !_isWallJumping) {
+                _body.velocity = new Vector2(_body.velocity.x * _traction,_body.velocity.y);
+            }
             // move horizontally
             if(_runInput*_body.velocity.x < _maxRunSpeed) {
                 if(_isGrounded) {
@@ -396,9 +396,12 @@ public class PlayerMovement : MonoBehaviour
             }
             //jump physics
             if(_doJumpNow) {
-                _isJumping = true;
                 _body.AddForce(transform.up*_jumpVelocity, ForceMode2D.Impulse);
                 _doJumpNow = false;
+            }
+            if(_stopJumpEarly) {
+                _body.velocity = new Vector2(_body.velocity.x, _body.velocity.y*0.6f);
+                _stopJumpEarly = false;
             }
             //walljump physics
             if(_doWallJumpNow) {
@@ -409,5 +412,6 @@ public class PlayerMovement : MonoBehaviour
         else{
             _body.velocity = new Vector2(0, _body.velocity.y);
         }
+        
     }
 }
