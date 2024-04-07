@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 public class Powerup : MonoBehaviour
@@ -15,6 +16,7 @@ public class Powerup : MonoBehaviour
     public void ItemCollected() {
         itemGot = true;
         allPowerUps.transform.position = new Vector3(-50,0,0);
+        StartCoroutine(RespawnItem());
     }
     public void ResetPosition() {
         itemGot = false;
@@ -24,5 +26,9 @@ public class Powerup : MonoBehaviour
         if(PlayerMovement._isDead || PlayerMovement._isLevelTransition) {
             ResetPosition();
         }
+    }
+    IEnumerator RespawnItem() {
+        yield return new WaitForSeconds(6.5f);
+        ResetPosition();
     }
 }

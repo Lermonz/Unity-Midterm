@@ -9,7 +9,7 @@ public class GameBehaviour : MonoBehaviour
     int _trueCheeses;
     public static int _onLevel = 1;
     bool updateLevelOnce = true;
-    public static int _score = 100000;
+    public static int _score;
     int _timeScore;
     int _cheeseScore;
     int _deathScore;
@@ -45,10 +45,13 @@ public class GameBehaviour : MonoBehaviour
     void Update() {
         int ms = Mathf.FloorToInt(Timer.ms*.1f);
         _timeScore = (Timer.m*6000+Timer.s*100+ms);
-        _cheeseScore = _totalCheese.Score * 10000;
+        if(_timeScore > 360000) {
+            _timeScore = 360000;
+        }
+        _cheeseScore = _totalCheese.Score * 20000;
         _deathScore = _totalDeath.Deaths * 2000;
         if(_updateScore) {
-            _score = Mathf.FloorToInt(100000 - _timeScore - _deathScore + _cheeseScore);
+            _score = Mathf.FloorToInt(500000 - _timeScore - _deathScore + _cheeseScore);
             if(_score < 0) {
                 _score = 0;
             }

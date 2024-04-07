@@ -10,6 +10,7 @@ TagManager:
   - Kill
   - Item
   - Sign
+  - Oneway
   layers:
   - Default
   - TransparentFX
